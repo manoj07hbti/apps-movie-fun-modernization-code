@@ -1,4 +1,4 @@
-package org.superbiz.moviefun.albums;
+package org.superbiz.moviefun.albumsapi;
 
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.dataformat.csv.CsvMapper;
@@ -6,7 +6,7 @@ import com.fasterxml.jackson.dataformat.csv.CsvSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.superbiz.moviefun.CsvUtils;
+
 import org.superbiz.moviefun.blobstore.Blob;
 import org.superbiz.moviefun.blobstore.BlobStore;
 
@@ -15,8 +15,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-import static com.fasterxml.jackson.dataformat.csv.CsvSchema.ColumnType;
-import static com.fasterxml.jackson.dataformat.csv.CsvSchema.builder;
 
 @Service
 public class AlbumsUpdater {
@@ -24,17 +22,17 @@ public class AlbumsUpdater {
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final ObjectReader objectReader;
     private final BlobStore blobStore;
-    private final AlbumsRepository albumsRepository;
+    private final AlbumsBean albumsBean;
 
-    public AlbumsUpdater(BlobStore blobStore, AlbumsRepository albumsRepository) {
+    public AlbumsUpdater(BlobStore blobStore, AlbumsBean albumsBean) {
         this.blobStore = blobStore;
-        this.albumsRepository = albumsRepository;
+        this.albumsBean = albumsBean;
 
-        CsvSchema schema = builder()
+        CsvSchema schema = CsvSchema.builder()
             .addColumn("artist")
             .addColumn("title")
-            .addColumn("year", ColumnType.NUMBER)
-            .addColumn("rating", ColumnType.NUMBER)
+            .addColumn("year", CsvSchema.ColumnType.NUMBER)
+            .addColumn("rating", CsvSchema.ColumnType.NUMBER)
             .build();
 
         objectReader = new CsvMapper().readerFor(Album.class).with(schema);
@@ -49,7 +47,7 @@ public class AlbumsUpdater {
         }
 
         List<Album> albumsToHave = CsvUtils.readFromCsv(objectReader, maybeBlob.get().inputStream);
-        List<Album> albumsWeHave = albumsRepository.getAlbums();
+        List<Album> albumsWeHave = albumsBean.getAlbums();
 
         createNewAlbums(albumsToHave, albumsWeHave);
         deleteOldAlbums(albumsToHave, albumsWeHave);
@@ -62,7 +60,7 @@ public class AlbumsUpdater {
             .stream()
             .filter(album -> albumsWeHave.stream().noneMatch(album::isEquivalent));
 
-        albumsToCreate.forEach(albumsRepository::addAlbum);
+        albumsToCreate.forEach(albumsBean::addAlbum);
     }
 
     private void deleteOldAlbums(List<Album> albumsToHave, List<Album> albumsWeHave) {
@@ -70,7 +68,7 @@ public class AlbumsUpdater {
             .stream()
             .filter(album -> albumsToHave.stream().noneMatch(album::isEquivalent));
 
-        albumsToDelete.forEach(albumsRepository::deleteAlbum);
+        albumsToDelete.forEach(albumsBean::deleteAlbum);
     }
 
     private void updateExistingAlbums(List<Album> albumsToHave, List<Album> albumsWeHave) {
@@ -79,7 +77,7 @@ public class AlbumsUpdater {
             .map(album -> addIdToAlbumIfExists(albumsWeHave, album))
             .filter(Album::hasId);
 
-        albumsToUpdate.forEach(albumsRepository::updateAlbum);
+        albumsToUpdate.forEach(albumsBean::updateAlbum);
     }
 
     private Album addIdToAlbumIfExists(List<Album> existingAlbums, Album album) {
